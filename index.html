@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APK Scanner 🍻</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 15px;
+            background-color: #f5f5f7;
+            color: #1d1d1f;
+            text-align: center;
+        }
+        .container {
+            max-width: 450px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+        .label-upload {
+            display: block;
+            background-color: #ff9f0a;
+            color: white;
+            padding: 14px;
+            font-size: 18px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+        .setup-section {
+            background: #f2f2f7;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        .setup-section label {
+            display: block;
+            font-weight: 600;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+        select, input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            border: 1px solid #d1d1d6;
+            border-radius: 8px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        .quick-buttons {
+            display: flex;
+            gap: 5px;
+            margin-top: 5px;
+        }
+        .quick-btn {
+            flex: 1;
+            background: #e5e5ea;
+            border: none;
+            padding: 6px;
+            font-size: 12px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .quick-btn:active { background: #d1d1d6; }
+        #preview {
+            max-width: 100%;
+            max-height: 150px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+        .result-box {
+            padding: 20px;
+            background-color: #1c1c1e;
+            color: white;
+            border-radius: 12px;
+            margin-top: 15px;
+        }
+        .apk-value {
+            font-size: 42px;
+            font-weight: 900;
+            color: #30d158;
+            margin: 10px 0;
+        }
+        .status-text {
+            font-size: 14px;
+            color: #aeaeae;
+        }
+        input[type="file"] { display: none; }
+    </style>
+    <script src="https://jsdelivr.net"></script>
+</head>
+<body>
+
+<div class="container">
+    <h2>Kalkylator: APK-Scanner 🍻</h2>
+    
+    <!-- Steg 1: Dryckens egenskaper -->
+    <div class="setup-section">
+        <label>1. Välj volym (eller skriv i ml):</label>
+        <input type="number" id="volume" value="500" placeholder="Volym i ml">
+        <div class="quick-buttons">
+            <button class="quick-btn" onclick="setVol(330)">33 cl</button>
+            <button class="quick-btn" onclick="setVol(440)">44 cl</button>
+            <button class="quick-btn" onclick="setVol(500)">50 cl</button>
+            <button class="quick-btn" onclick="setVol(750)">75 cl</button>
+        </div>
+
+        <label>2. Alkoholhalt (%):</label>
+        <input type="number" id="abv" value="5.2" step="0.1" placeholder="Ex: 5.2">
+        <div class="quick-buttons">
+            <button class="quick-btn" onclick="setAbv(5.2)">5.2%</button>
+            <button class="quick-btn" onclick="setAbv(7.0)">7.0%</button>
+            <button class="quick-btn" onclick="setAbv(12.0)">12%</button>
+            <button class="quick-btn" onclick="setAbv(40.0)">40%</button>
+        </div>
+    </div>
+
+    <!-- Steg 2: Skanna priset -->
+    <label class="label-upload">
+        📷 Skanna Prislapp (Kamera)
+        <input type="file" id="image-input" accept="image/*" capture="environment">
+    </label>
+
+    <img id="preview" alt="Prislapp">
+
+    <!-- Steg 3: Resultat -->
+    <div class="result-box">
+        <div class="status-text" id="status">Väntar på prislapp...</div>
+        <div class="apk-value" id="apk-result">0.00</div>
+        <div>Alkohol Per Krona (APK)</div>
+        <p style="font-size: 14px; margin-top: 10px; color: #aeaeae;">
+            Skannat pris: <span id="detected-price" style="color:white; font-weight:bold;">-</span> kr
+        </p>
+    </div>
+</div>
+
+<script>
+    const imageInput = document.getElementById('image-input');
+    const preview = document.getElementById('preview');
+    const statusText = document.getElementById('status');
+    const apkResult = document.getElementById('apk-result');
+    const detectedPriceText = document.getElementById('detected-price');
+
+    // Snabba hjälpfunktioner för knapparna
+    function setVol(ml) { document.getElementById('volume').value = ml; räknaOmMöjligt(); }
+    function setAbv(pct) { document.getElementById('abv').value = pct; räknaOmMöjligt(); }
+
+    let globaltPris = null;
+
+    imageInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        preview.src = URL.createObjectURL(file);
+        preview.style.display = 'block';
+        statusText.innerText = "Läser av prislapp...";
+        apkResult.innerText = "0.00";
+        detectedPriceText.innerText = "-";
+
+        Tesseract.recognize(file, 'swe')
+            .then(({ data: { text } }) => {
+                statusText.innerText = "Avläsning klar!";
+                hittaPris(text);
+            })
+            .catch(err => {
+                statusText.innerText = "Fel vid skanning.";
+                console.error(err);
+            });
+    });
+
+    function hittaPris(text) {
+        // Regex som letar efter priser (t.ex. 19,90 eller 24:90 eller bara 25)
+        const regex = /\b\d+(?:[\.,:]\d{2})?\b/g;
+        const matches = text.match(regex);
+
+        if (matches && matches.length > 0) {
+            // Vi rensar och tar det första rimliga siffervärdet som hittas på lappen
+            let råttPris = matches[0].replace(':', '.').replace(',', '.');
+            let pris = parseFloat(råttPris);
+
+            if (!isNaN(pris) && pris > 0) {
+                globaltPris = pris;
+                detectedPriceText.innerText = pris.toFixed(2);
+                beräknaAPK(pris);
+                return;
+            }
+        }
+        statusText.innerText = "Kunde inte läsa priset. Ange manuellt i konsolen eller försök igen.";
+    }
+
+    function beräknaAPK(pris) {
+        const volym = parseFloat(document.getElementById('volume').value);
+        const alkohol = parseFloat(document.getElementById('abv').value);
+
+        if (!isNaN(volym) && !isNaN(alkohol) && pris > 0) {
+            // APK Formel: (Volym i ml * (Procent / 100)) / Pris
+            const renAlkoholMl = volym * (alkohol / 100);
+            const apk = renAlkoholMl / pris;
+            
+            apkResult.innerText = apk.toFixed(2);
+        }
+    }
+
+    // Om användaren ändrar volym/procent efter att ha skannat räknas det om direkt
+    function räknaOmMöjligt() {
+        if (globaltPris) beräknaAPK(globaltPris);
+    }
+</script>
+
+</body>
+</html>
